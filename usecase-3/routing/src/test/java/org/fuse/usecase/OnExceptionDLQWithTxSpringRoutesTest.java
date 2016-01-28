@@ -100,9 +100,9 @@ public class OnExceptionDLQWithTxSpringRoutesTest extends CamelSpringTestSupport
         // We verify that the headers received for the erroneous message correspond to our expectations
         List<Exchange> exchanges = mockError.getExchanges();
         Message msg = exchanges.get(0).getIn();
-        assertEquals("111", msg.getHeader("error-code"));
+        assertEquals("111", msg.getHeader("error_code"));
         assertEquals("No position 11 defined for the field: 19728, line: 1 must be specified",
-                msg.getHeader("error-message"));
+                msg.getHeader("error_message"));
 
         // 3 messages should be received from the output-usecase queue and containig the correct json response resulting from CSV2JSON transformation
         exchanges = mockOutput.getExchanges();

@@ -45,10 +45,13 @@
     <!-- ActiveMQ Camel Component - No Tx -->
     <bean id="amq-notx" class="org.apache.activemq.camel.component.ActiveMQComponent">
     	<property name="connectionFactory" ref="jmsConnectionFactory"/>
+    	<property name="transacted" value="false"/> 
     </bean>
 
     <camelContext trace="false" xmlns="http://camel.apache.org/schema/spring">
         <propertyPlaceholder id="properties" location="fabric8/route.properties"/>
+        
+        <jmxAgent id="camel-main" disabled="true" />
         
         <endpoint id="csv2json"
                   uri="dozer:csv2json?unmarshalId=csv&amp;marshalId=transform-json&amp;sourceModel=org.acme.Customer&amp;targetModel=org.globex.Account&amp;mappingFile=transformation.xml"/>
@@ -57,41 +60,47 @@
 			<bindy type="Csv" classType="org.acme.Customer" id="csv" />
 			<json library="Jackson" unmarshalTypeName="org.globex.Account" id="transform-json"/>
 		</dataFormats>
+		
+		<onException>
+			<exception>java.lang.IllegalArgumentException</exception>
+			<handled>
+				<constant>false</constant>
+			</handled>
+			<log message="Transformation result in error ${body}" />
+			<setHeader headerName="error_code">
+				<constant>111</constant>
+			</setHeader>
+			<setHeader headerName="error_message">
+				<simple>${exception.message}</simple>
+			</setHeader>
+			<setHeader headerName="message">
+                <simple>${in.body}</simple>
+            </setHeader>
+            <setHeader headerName="status">
+                <constant>ERROR</constant>
+            </setHeader>
+			<to uri="seda:error-queue" />
+		</onException>
         
         <route id="queue-split-transform-queue">
         	<from uri="amq-notx:queue:usecase-input"/>
-        	<onException>
-				<exception>java.lang.IllegalArgumentException</exception>
-				<handled>
-					<constant>false</constant>
-				</handled>
-				<log message="Transformation result in error ${body}"/>
-				<setHeader headerName="error-code">
-                    <constant>111</constant>
-                </setHeader>
-                <setHeader headerName="error-message">
-                    <simple>${exception.message}</simple>
-                </setHeader>
-                <setBody>
-                	<simple>${body}</simple>
-                </setBody>
-                <to uri="direct:error-queue" />
-			</onException>
 			<split>
                 <tokenize token="\n" trim="true"/>
                 <log message="Transform input ${body} to json"/>
                 <to ref="csv2json"/>
-                <to id="output-queue-endpoint" uri="amq-notx:queue:output"/>
+                <to id="output-queue-endpoint" uri="amq-notx:queue:usecase-output"/>
             </split>
         </route>
         
         <route id="direct-error-queue">
-        	<from uri="direct:error-queue" />
-        	<transform>
-				<method bean="processorBean" method="defineErrorParameters"></method>
-			</transform>
-			<to id="error-queue-endpoint"
-				uri="sql:INSERT INTO USECASE.T_ERROR (ERROR_CODE,ERROR_MESSAGE,MESSAGE,STATUS) VALUES (:#ERROR_CODE,:#ERROR_MESSAGE,:#MESSAGE,:#STATUS)" />
+        	<from uri="seda:error-queue"/>
+            <to id="error-queue-endpoint" uri="amq-notx:queue:usecase-notification"/>
+        </route>
+        
+        <route>
+            <from uri="amq-notx:queue:usecase-notification"/>
+            <to uri="log:INFO"/>
+            <to uri="sql:INSERT INTO USECASE.T_ERROR (ERROR_CODE, ERROR_MESSAGE, MESSAGE, STATUS) VALUES(:#error_code, :#error_message, :#message, :#status)"/>
         </route>
 		
 		<route>
@@ -99,11 +108,11 @@
             <transform>
                 <simple>${in.body.get('MESSAGE')}</simple>
             </transform>
-            <to uri="amq-tx:queue:input"/>
+            <to uri="amq-tx:queue:usecase-input"/>
         </route>
 		
 		<route>
-			<from uri="amq-notx:queue:output" />
+			<from uri="amq-notx:queue:usecase-output" />
 			<unmarshal ref="transform-json" />
 			<transform>
 				<method bean="processorBean" method="defineNamedParameters"></method>

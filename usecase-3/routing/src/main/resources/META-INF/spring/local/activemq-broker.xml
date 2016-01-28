@@ -8,7 +8,8 @@
        http://activemq.apache.org/schema/core/activemq-core.xsd">
 
 	<!-- ActiveMQ Broker -->
-	<broker brokerName="demo" xmlns="http://activemq.apache.org/schema/core">
+	<broker brokerName="demo" xmlns="http://activemq.apache.org/schema/core" useJmx="false"
+            schedulerSupport="true">
 
 		<destinationPolicy>
 			<policyMap>
@@ -28,12 +29,21 @@
 		</destinationPolicy>
 
 		<plugins>
-			<simpleAuthenticationPlugin>
+		    <simpleAuthenticationPlugin>
 				<users>
 					<authenticationUser username="admin" password="admin"
 						groups="users,admins" />
 				</users>
 			</simpleAuthenticationPlugin>
+			<redeliveryPlugin fallbackToDeadLetter="true" sendToDlqIfMaxRetriesExceeded="true">
+                <redeliveryPolicyMap>
+                    <redeliveryPolicyMap>
+                        <redeliveryPolicyEntries>
+                            <redeliveryPolicy queue=">" maximumRedeliveries="2" redeliveryDelay="10000" />
+                        </redeliveryPolicyEntries>
+                    </redeliveryPolicyMap>
+                </redeliveryPolicyMap>
+            </redeliveryPlugin>
 		</plugins>
 
 		<transportConnectors>
