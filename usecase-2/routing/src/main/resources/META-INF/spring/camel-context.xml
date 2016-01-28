@@ -1,8 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <beans xmlns="http://www.springframework.org/schema/beans"
-       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-       xmlns:cxf="http://camel.apache.org/schema/cxf"
-       xsi:schemaLocation="
+	xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:cxf="http://camel.apache.org/schema/cxf"
+	xsi:schemaLocation="
        http://www.springframework.org/schema/beans
        http://www.springframework.org/schema/beans/spring-beans.xsd
        http://camel.apache.org/schema/cxf
@@ -10,29 +9,134 @@
        http://camel.apache.org/schema/spring
        http://camel.apache.org/schema/spring/camel-spring.xsd">
 
-    <!-- H2 Datasource -->
-    <bean id="usecaseDB" class="org.springframework.jdbc.datasource.DriverManagerDataSource">
-        <property name="driverClassName" value="org.h2.Driver"/>
-        <property name="url" value="jdbc:h2:tcp://localhost/~/usecaseDB"/>
-        <property name="username" value="sa"/>
-        <property name="password" value=""/>
-    </bean>
+	<!-- H2 Datasource -->
+	<bean id="usecaseDB"
+		class="org.springframework.jdbc.datasource.DriverManagerDataSource">
+		<property name="driverClassName" value="org.h2.Driver" />
+		<property name="url" value="jdbc:h2:tcp://localhost/~/usecaseDB" />
+		<property name="username" value="sa" />
+		<property name="password" value="" />
+	</bean>
 
-    <!-- SQL Component -->
-    <bean id="sql" class="org.apache.camel.component.sql.SqlComponent">
+	<!-- SQL Component -->
+	<bean id="sql" class="org.apache.camel.component.sql.SqlComponent">
+		<property name="dataSource" ref="usecaseDB" />
+		<property name="usePlaceholder" value="true" />
+	</bean>
 
-    </bean>
+	<bean id="jsonDataProvider"
+		class="com.fasterxml.jackson.jaxrs.json.JacksonJaxbJsonProvider" />
 
-    <cxf:cxfEndpoint id="customerWebService">
-    </cxf:cxfEndpoint>
+	<bean id="customerReSTBean" class="org.fuse.usecase.service.CustomerRestImpl" />
+	<bean id="customerWSBean" class="org.fuse.usecase.service.CustomerWSImpl" />
 
-    <cxf:rsServer id="customerRestService">
-    </cxf:rsServer>
+	<bean id="accountAggregator" class="org.fuse.usecase.AccountAggregator" />
+	<bean id="processorBean" class="org.fuse.usecase.ProcessorBean" />
 
-    <cxf:rsClient id="customerRestServiceClient">
-    </cxf:rsClient>
+	<cxf:cxfEndpoint id="customerWSServer"
+		address="http://localhost:9090/ws/customerService" serviceClass="org.fuse.usecase.service.CustomerWS"
+		loggingFeatureEnabled="true">
+	</cxf:cxfEndpoint>
 
-    <camelContext trace="false" xmlns="http://camel.apache.org/schema/spring">
-        <propertyPlaceholder id="properties" location="fabric8/route.properties"/>
-    </camelContext>
+	<cxf:rsServer id="customerRestService" address="http://localhost:9191/rest"
+		serviceClass="org.fuse.usecase.service.CustomerRest"
+		loggingFeatureEnabled="true">
+		<cxf:providers>
+			<ref bean="jsonDataProvider" />
+		</cxf:providers>
+	</cxf:rsServer>
+
+	<cxf:rsClient id="customerRestServiceClient" address="http://localhost:9191/rest"
+		serviceClass="org.fuse.usecase.service.CustomerRest"
+		loggingFeatureEnabled="true">
+		<cxf:providers>
+			<ref bean="jsonDataProvider" />
+		</cxf:providers>
+	</cxf:rsClient>
+
+	<!-- I reused this from usecase-1 --><!-- Aggregator pattern used to invoke the web services and combine the 
+		results --><!-- Save the results to a file --><!-- Finally I insert the records inside DB --><!-- This route calls the REST service and sets the specific headers --><!-- Client --><!-- Server --><!-- This route calls the JAX-WS service --><!-- Client --><!-- Server --><!-- This route saves the combined results into a file --><!-- This route insert the records into the DB -->
+	<camelContext trace="false"
+		xmlns="http://camel.apache.org/schema/spring">
+		<propertyPlaceholder location="fabric8/route.properties"
+			id="properties" />
+		<endpoint
+			uri="dozer:csv2json?sourceModel=org.acme.Customer&amp;targetModel=org.globex.Account&amp;mappingFile=transformation.xml"
+			id="csv2json" />
+		<dataFormats>
+			<bindy type="Csv" classType="org.acme.Customer" id="csv" />
+			<json library="Jackson" id="transform-json" />
+		</dataFormats>
+		<route>
+			<from uri="file:src/data/inbox?fileName=customers.csv&amp;noop=true" />
+			<onException>
+				<exception>java.lang.IllegalArgumentException</exception>
+				<handled>
+					<constant>true</constant>
+				</handled>
+				<to
+					uri="file:src/data/error?fileName=account-${property.CamelSplitIndex}.json" />
+			</onException>
+			<split streaming="true">
+				<tokenize token="\n" trim="true"></tokenize>
+				<unmarshal ref="csv" />
+				<to ref="csv2json" />
+				<multicast strategyRef="accountAggregator">
+                   	<to uri="direct:callReSTEndpoint" pattern="InOut"/>
+                   	<to uri="direct:callWSEndpoint" pattern="InOut"/>
+               	</multicast>
+				<wireTap uri="direct:saveToFile" />
+				<to uri="direct:insertDB" />
+			</split>
+		</route>
+		<route id="ReSTClientRoute">
+			<from uri="direct:callReSTEndpoint" />
+			<setHeader headerName="operationName">
+				<constant>enrich</constant>
+			</setHeader>
+			<setHeader headerName="CamelCxfRsUsingHttpAPI">
+				<simple>${type:java.lang.Boolean.FALSE}</simple>
+			</setHeader>
+			<setHeader headerName="CamelAcceptContentType">
+				<constant>application/json</constant>
+			</setHeader>
+			<to uri="cxfrs:bean:customerRestServiceClient" />
+		</route>
+		<route id="ReSTServerRoute">
+			<from
+				uri="cxfrs:bean:customerRestService?bindingStyle=SimpleConsumer&amp;resourceClasses=org.fuse.usecase.service.CustomerRest" />
+			<bean ref="customerReSTBean" method="enrich" />
+		</route>
+		<route id="WSClientRoute">
+			<from uri="direct:callWSEndpoint" />
+			<setHeader headerName="operationName">
+				<constant>updateAccount</constant>
+			</setHeader>
+			<to uri="cxf:bean:customerWSServer" />
+			<transform>
+				<simple>
+                    ${in.body[0]}
+                </simple>
+			</transform>
+		</route>
+		<route id="WSServerRoute">
+			<from uri="cxf:bean:customerWSServer" />
+			<bean ref="customerWSBean" method="updateAccount" />
+		</route>
+		<route>
+			<from uri="direct:saveToFile" />
+			<marshal ref="transform-json" />
+			<convertBodyTo type="java.lang.String" />
+			<to
+				uri="file:src/data/outbox?fileName=csv-record-${date:now:yyyyMMdd}.txt" />
+		</route>
+		<route>
+			<from uri="direct:insertDB" />
+			<transform>
+				<method bean="processorBean" method="defineNamedParameters"></method>
+			</transform>
+			<to
+				uri="sql:INSERT INTO USECASE.T_ACCOUNT (CLIENT_ID,SALES_CONTACT,COMPANY_NAME,COMPANY_GEO,COMPANY_ACTIVE,CONTACT_FIRST_NAME,CONTACT_LAST_NAME,CONTACT_ADDRESS,CONTACT_CITY,CONTACT_STATE,CONTACT_ZIP,CONTACT_PHONE,CREATION_DATE,CREATION_USER) VALUES (:#CLIENT_ID,:#SALES_CONTACT,:#COMPANY_NAME,:#COMPANY_GEO,:#COMPANY_ACTIVE,:#CONTACT_FIRST_NAME,:#CONTACT_LAST_NAME,:#CONTACT_ADDRESS,:#CONTACT_CITY,:#CONTACT_STATE,:#CONTACT_ZIP,:#CONTACT_PHONE,:#CREATION_DATE,:#CREATION_USER)" />
+		</route>
+	</camelContext>
 </beans>

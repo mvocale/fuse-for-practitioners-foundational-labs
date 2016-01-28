@@ -1,23 +1,24 @@
 package org.fuse.usecase;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import org.globex.Account;
-import org.globex.Company;
-import org.globex.Contact;
-import org.junit.Test;
-
-import java.io.IOException;
-
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertThat;
-import static org.junit.matchers.JUnitMatchers.containsString;
+
+import java.io.IOException;
+
+import org.globex.Account;
+import org.globex.Company;
+import org.globex.Contact;
+import org.hamcrest.CoreMatchers;
+import org.junit.Test;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
 
 public class JacksonCompanyTest {
 
     @Test
     public void AccountToJson() throws IOException {
-        Account account = new Account();
+    	Account account = new Account();
 
         Company company = new Company();
         company.setName("Rotobots");
@@ -37,8 +38,8 @@ public class JacksonCompanyTest {
         account.setContact(contact);
 
         String result = new ObjectMapper().writeValueAsString(account);
-        assertThat(result, containsString("company"));
-        assertThat(result, containsString("contact"));
+        assertThat(result, CoreMatchers.containsString("company"));
+        assertThat(result, CoreMatchers.containsString("contact"));
     }
 
     @Test

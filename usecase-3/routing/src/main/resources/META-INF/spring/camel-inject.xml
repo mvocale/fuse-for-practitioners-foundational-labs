@@ -7,10 +7,10 @@
        http://camel.apache.org/schema/spring
        http://camel.apache.org/schema/spring/camel-spring.xsd">
 
-    <camelContext trace="false" xmlns="http://camel.apache.org/schema/spring">
+    <!--<camelContext trace="false" xmlns="http://camel.apache.org/schema/spring">
         <propertyPlaceholder id="properties" location="fabric8/route.properties"/>
-        <route id="file-queue">
-        </route>
-    </camelContext>
+          <route id="file-queue">
+        </route> 
+    </camelContext> -->
 
 </beans>

@@ -1,18 +1,5 @@
 package org.fuse.usecase;
 
-import org.apache.camel.Exchange;
-import org.apache.camel.Message;
-import org.apache.camel.builder.AdviceWithRouteBuilder;
-import org.apache.camel.component.mock.MockEndpoint;
-import org.apache.camel.test.spring.CamelSpringTestSupport;
-import org.h2.tools.Server;
-import org.junit.After;
-import org.junit.Before;
-import org.junit.Test;
-import org.springframework.context.support.AbstractApplicationContext;
-import org.springframework.context.support.ClassPathXmlApplicationContext;
-import org.springframework.jdbc.datasource.embedded.EmbeddedDatabase;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
@@ -24,6 +11,18 @@ import java.sql.Connection;
 import java.sql.DriverManager;
 import java.sql.Statement;
 import java.util.List;
+
+import org.apache.camel.Exchange;
+import org.apache.camel.Message;
+import org.apache.camel.builder.AdviceWithRouteBuilder;
+import org.apache.camel.component.mock.MockEndpoint;
+import org.apache.camel.test.spring.CamelSpringTestSupport;
+import org.h2.tools.Server;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+import org.springframework.context.support.AbstractApplicationContext;
+import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 public class OnExceptionDLQWithTxSpringRoutesTest extends CamelSpringTestSupport {
 
@@ -42,12 +41,10 @@ public class OnExceptionDLQWithTxSpringRoutesTest extends CamelSpringTestSupport
     private String queueInputEndpoint = "amq-notx:usecase-input";
     private final String mockErrorEndpoint = "mock:error";
     private final String mockOutputEndpoint = "mock:output";
-    private EmbeddedDatabase db;
     private Server server;
 
     @Before @Override
     public void setUp() throws Exception {
-
         String HomeDir = System.getProperty("user.home");
         String URL = "jdbc:h2:tcp://localhost:9093" + HomeDir + "/usecaseTestDB";
 
@@ -68,7 +65,6 @@ public class OnExceptionDLQWithTxSpringRoutesTest extends CamelSpringTestSupport
 
     @Test
     public void shouldGetMessageWithinDLQ() throws Exception {
-
         // We will extend the route of the error queue to add a mock endpoint
         context.getRouteDefinition("direct-error-queue").adviceWith(context, new AdviceWithRouteBuilder() {
             @Override public void configure() throws Exception {
