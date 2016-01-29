@@ -72,16 +72,16 @@ public class LDAPActiveMQTest extends AbstractLdapTestUnit {
             MessageProducer producer = session.createProducer(queue);
             TextMessage test = session.createTextMessage("test-message");
             producer.send(test);
+            connection.start();
             
-            /**MessageConsumer consumer = session.createConsumer(queue);
+            MessageConsumer consumer = session.createConsumer(queue);
             Message message = consumer.receive(4000);
             if (message != null) {
                 if (message instanceof TextMessage) {
                     String text = ((TextMessage) message).getText();
-                    System.out.println("Ci passo!!!!!!!!!!!!!!!!!");
                     Assert.assertEquals(text, "test-message");
                 }
-            }**/
+            }
         } finally {
         	if (connection != null) {
         		connection.close();
